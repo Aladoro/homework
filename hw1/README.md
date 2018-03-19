@@ -16,3 +16,5 @@ In `experts/`, the provided expert policies are:
 * Walker2d-v1.pkl
 
 The name of the pickle file corresponds to the name of the gym environment.
+
+SOLUTIONS to the exercises are in the notebook file Assignment1-solutions, additionally a few helper functions created and used are also in run_expert and Utilities_file
