@@ -171,26 +171,22 @@ def train_PG(exp_name='',
 	if discrete:
 		# YOUR_CODE_HERE
 		sy_logits_na = build_mlp(sy_ob_no, ac_dim, "nn", size=size, n_layers=n_layers)
-		print(tf.shape(sy_logits_na))
 		sy_sampled_ac = tf.reshape(tf.multinomial(tf.nn.log_softmax(sy_logits_na), tf.shape(sy_ob_no)[0]), [tf.shape(sy_ob_no)[0]]) # Hint: Use the tf.multinomial op
-		sy_logprob_n = tf.nn.softmax_cross_entropy_with_logits(labels=tf.one_hot(sy_ac_na, ac_dim), logits=sy_logits_na)
+		sy_logprob_n = tf.nn.softmax_cross_entropy_with_logits(logits = sy_logits_na, labels = tf.one_hot(sy_ac_na, ac_dim))#tf.gather_nd(tf.nn.log_softmax(sy_logits_na), tf.stack([tf.range(tf.shape(sy_logits_na)[0]), sy_ac_na],-1))
 
 	else:
 		# YOUR_CODE_HERE
 		sy_mean = build_mlp(sy_ob_no, ac_dim, "mean", size=size, n_layers=n_layers)
 		sy_logstd = tf.log(tf.get_variable(name="stdev", shape=[ac_dim, ac_dim])) # logstd should just be a trainable variable, not a network output.
-		sy_sampled_ac = tf.matmul(tf.random_normal([tf.shape(sy_ob_no)[0], ac_dim]), sy_logstd) + sy_mean
-		sy_logprob_n = tf.nn.softmax_cross_entropy_with_logits(labels=sy_ac_na, logits=sy_sampled_ac)  # Hint: Use the log probability under a multivariate gaussian. //still incorrect, todo
-
-
-
+		sy_sampled_ac = tf.matmul(tf.random_normal([tf.shape(sy_ob_no)[0], ac_dim])+ sy_mean, sy_logstd)
+		sy_logprob_n = (-1/2)*tf.matmul(tf.matrix_inverse(sy_logstd), (sy_mean - sy_ac_na))  # Hint: Use the log probability under a multivariate gaussian. //still incorrect, todo
 
 	#========================================================================================#
 	#                           ----------SECTION 4----------
 	# Loss Function and Training Operation
 	#========================================================================================#
 
-	loss = -1*tf.reduce_mean(sy_logprob_n*sy_adv_n) # Loss function that we'll differentiate to get the policy gradient.
+	loss = tf.reduce_mean(sy_logprob_n*sy_adv_n) # Loss function that we'll differentiate to get the policy gradient.
 	update_op = tf.train.AdamOptimizer(learning_rate).minimize(loss)
 
 
@@ -371,7 +367,7 @@ def train_PG(exp_name='',
 			# YOUR_CODE_HERE
 			mean = np.mean(adv_n)
 			stdev = np.std(adv_n)
-			adv_n = adv_n/stdev - mean
+			adv_n = (adv_n-mean)/stdev
 
 
 		#====================================================================================#
