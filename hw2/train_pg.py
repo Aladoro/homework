@@ -178,8 +178,8 @@ def train_PG(exp_name='',
 		# YOUR_CODE_HERE
 		sy_mean = build_mlp(sy_ob_no, ac_dim, "mean", size=size, n_layers=n_layers)
 		sy_logstd = tf.log(tf.get_variable(name="stdev", shape=[ac_dim, ac_dim])) # logstd should just be a trainable variable, not a network output.
-		sy_sampled_ac = tf.matmul(tf.random_normal([tf.shape(sy_ob_no)[0], ac_dim])+ sy_mean, sy_logstd)
-		sy_logprob_n = (-1/2)*tf.matmul(tf.matrix_inverse(sy_logstd), (sy_mean - sy_ac_na))  # Hint: Use the log probability under a multivariate gaussian. //still incorrect, todo
+		sy_sampled_ac = tf.matmul(tf.random_normal([tf.shape(sy_ob_no)[0], ac_dim]), tf.exp(sy_logstd)) + sy_mean
+		sy_logprob_n = -1*(-1/2*tf.transpose(sy_ac_na-sy_mean)*tf.matrix_inverse(tf.square(tf.exp(sy_logstd)))*(sy_ac_na-sy_mean)-(tf.log(tf.matrix_determinant(tf.exp(sy_logstd)))))  # Hint: Use the log probability under a multivariate gaussian. //still incorrect, todo
 
 	#========================================================================================#
 	#                           ----------SECTION 4----------
@@ -205,7 +205,11 @@ def train_PG(exp_name='',
 		# Define placeholders for targets, a loss function and an update op for fitting a 
 		# neural network baseline. These will be used to fit the neural network baseline. 
 		# YOUR_CODE_HERE
-		baseline_update_op = TODO
+		target_val = tf.placeholder(shape=[None],name='tv', dtype=tf.float32)
+		target_rewards = tf.placeholder(shape=[None],name='rw', dtype=tf.float32)
+		loss = tf.reduce_mean(tf.square(baseline_prediction - target_rewards - gamma*target_val))
+    
+		baseline_update_op = tf.train.AdamOptimizer(learning_rate).minimize(loss)
 
 
 	#========================================================================================#
@@ -351,7 +355,8 @@ def train_PG(exp_name='',
 			# (mean and std) of the current or previous batch of Q-values. (Goes with Hint
 			# #bl2 below.)
 
-			b_n = TODO
+			b_n = sess.run(baseline_prediction, feed_dict={sy_ob_no : ob_no})
+			b_n = (b_n - np.mean(b_n))/np.std(b_n)*np.std(q_n) + np.mean(q_n)
 			adv_n = q_n - b_n
 		else:
 			adv_n = q_n.copy()
@@ -386,7 +391,11 @@ def train_PG(exp_name='',
 			# targets to have mean zero and std=1. (Goes with Hint #bl1 above.)
 
 			# YOUR_CODE_HERE
-			pass
+			targets_base = b_n[1:]
+			rewards_base = np.concatenate([path["reward"] for path in paths])[:-1]
+			obs_base = ob_no[:-1, :]
+        
+			sess.run(baseline_update_op, feed_dict = {sy_ob_no: obs_base, target_val: targets_base, target_rewards: rewards_base})
 
 		#====================================================================================#
 		#                           ----------SECTION 4----------
