@@ -178,8 +178,10 @@ def train_PG(exp_name='',
 		# YOUR_CODE_HERE
 		sy_mean = build_mlp(sy_ob_no, ac_dim, "mean", size=size, n_layers=n_layers)
 		sy_logstd = tf.log(tf.get_variable(name="stdev", shape=[ac_dim, ac_dim])) # logstd should just be a trainable variable, not a network output.
-		sy_sampled_ac = tf.matmul(tf.random_normal([tf.shape(sy_ob_no)[0], ac_dim]), tf.exp(sy_logstd)) + sy_mean
-		sy_logprob_n = -1*(-1/2*tf.transpose(sy_ac_na-sy_mean)*tf.matrix_inverse(tf.square(tf.exp(sy_logstd)))*(sy_ac_na-sy_mean)-(tf.log(tf.matrix_determinant(tf.exp(sy_logstd)))))  # Hint: Use the log probability under a multivariate gaussian. //still incorrect, todo
+		sy_stdev = tf.exp(sy_logstd)+1e-4
+		sy_var = tf.square(sy_stdev)
+		sy_sampled_ac = tf.random_normal([tf.shape(sy_ob_no)[0], ac_dim])*sy_stdev + sy_mean
+		sy_logprob_n = 1/2*(tf.reduce_sum(tf.square(sy_ac_na - sy_mean)/sy_var, axis = 1) + tf.log(tf.reduce_prod(sy_var))) # Hint: Use the log probability under a multivariate gaussian. //still incorrect, todo
 
 	#========================================================================================#
 	#                           ----------SECTION 4----------
@@ -187,7 +189,7 @@ def train_PG(exp_name='',
 	#========================================================================================#
 
 	loss = tf.reduce_mean(sy_logprob_n*sy_adv_n) # Loss function that we'll differentiate to get the policy gradient.
-	update_op = tf.train.AdamOptimizer(learning_rate).minimize(loss)
+	update_op = tf.train.MomentumOptimizer(learning_rate, 0.9, use_nesterov=True).minimize(loss)
 
 
 	#========================================================================================#
