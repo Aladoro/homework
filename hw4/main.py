@@ -24,6 +24,31 @@ def sample(env,
     """
     paths = []
     """ YOUR CODE HERE """
+    
+    for i in range(num_paths):
+    	path = {}
+    	path['observations'] = []
+    	path['next_observations'] = []
+    	path['actions'] = []
+    	path['rewards'] = []
+
+    	next_observation = env.reset()
+
+    	for j in range(horizon):
+    		path['observations'].append(next_observation)
+
+    		if render:
+    			env.render()
+    		action = controller.get_action(next_observation)
+    		path['actions'].append(action)
+    		next_observation, reward, done, info = env.step(action)
+    		path['next_observations'].append(next_observation)
+    		path['rewards'].append(reward)
+
+    		if done:
+    			break
+
+    	paths.append(path)
 
     return paths
 
@@ -38,7 +63,17 @@ def compute_normalization(data):
     """
 
     """ YOUR CODE HERE """
-    return mean_obs, std_obs, mean_deltas, std_deltas, mean_action, std_action
+    normalization = {}
+    normalization['states_mean'] = np.mean(data['states'], axis = 0)
+    normalization['states_stdev'] = np.mean(data['states'], axis = 0)
+
+    normalization['deltas_mean'] = np.mean(data['deltas'], axis = 0)
+    normalization['deltas_stdev'] = np.mean(data['deltas'], axis = 0)
+
+    normalization['actions_mean'] = np.mean(data['actions'], axis = 0)
+    normalization['actions_stdev'] = np.mean(data['actions'], axis = 0)
+
+    return normalization
 
 
 def plot_comparison(env, dyn_model):
@@ -46,7 +81,22 @@ def plot_comparison(env, dyn_model):
     Write a function to generate plots comparing the behavior of the model predictions for each element of the state to the actual ground truth, using randomly sampled actions. 
     """
     """ YOUR CODE HERE """
+    states = []
+    next_states = []
+    state_predictions = []
     pass
+
+def data_from_paths(paths):
+	data = {}
+	data['states'] = np.array(paths[0]['observations'])
+	data['next_states'] = np.array(paths[0]['next_observations'])
+	data['actions'] = np.array(paths[0]['actions'])
+	for i in range(len(paths)-1):
+		data['states'] = np.concatenate((data['states'], np.array(paths[i + 1]['observations'])), axis = 0)
+		data['next_states'] = np.concatenate((data['next_states'], np.array(paths[i + 1]['next_observations'])), axis = 0)
+		data['actions'] = np.concatenate((data['actions'], np.array(paths[i + 1]['actions'])), axis = 0)
+	data['deltas'] = data['next_states'] - data['states']
+	return data
 
 def train(env, 
          cost_fn,
@@ -112,6 +162,8 @@ def train(env,
     random_controller = RandomController(env)
 
     """ YOUR CODE HERE """
+    paths = sample(env, random_controller, num_paths_random, env_horizon)
+    data = data_from_paths(paths)
 
 
     #========================================================
@@ -122,7 +174,7 @@ def train(env,
     # for normalizing inputs and denormalizing outputs
     # from the dynamics network. 
     # 
-    normalization = """ YOUR CODE HERE """
+    normalization = compute_normalization(data)
 
 
     #========================================================
@@ -163,8 +215,27 @@ def train(env,
     # 
     for itr in range(onpol_iters):
         """ YOUR CODE HERE """
+        print("Iteration "+ str(itr))
+        for i in range(dynamics_iters):
+        	batch_data = {}
+        	indexes = np.random.randint(data['states'].shape[0], size = batch_size)
+        	batch_data['states'] = data['states'][indexes, :]
+        	batch_data['next_states'] = data['next_states'][indexes, :]
+        	batch_data['actions'] = data['actions'][indexes, :]
+        	batch_data['deltas'] = data['deltas'][indexes, :]
+        	dyn_model.fit(batch_data)
 
-
+        new_paths = sample(env, mpc_controller, num_paths_onpol, env_horizon)
+        new_data = data_from_paths(new_paths)
+        data['states'] = np.concatenate((data['states'], new_data['states']), axis = 0)
+        data['next_states'] = np.concatenate((data['next_states'], new_data['next_states']), axis = 0)
+        data['actions'] = np.concatenate((data['actions'], new_data['actions']), axis = 0)
+        data['deltas'] = np.concatenate((data['deltas'], new_data['deltas']), axis = 0)
+        returns = []
+        costs = []
+        for path in new_paths:
+        	returns.append(np.sum(path['rewards']))
+        	costs.append(trajectory_cost_fn(cheetah_cost_fn, path['observations'], path['actions'], path['next_observations']))
 
         # LOGGING
         # Statistics for performance of MPC policy using
